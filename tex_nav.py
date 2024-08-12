@@ -84,6 +84,15 @@ class TextEditor:
         self.root.update()
         self.main_paned.sash_place(0, int(self.root.winfo_width() * 0.8), 0)  # 80% for left pane
         self.left_paned.sash_place(0, int(self.root.winfo_width() * 0.3), 0)  # 30% for directory listing
+        
+        # Initialize search position
+        self.current_search_position = '1.0'
+        self.word_to_find = ""
+        
+        # Store find next window
+        self.find_window = None
+        self.highlight_tag = 'highlight'
+        self.current_highlight_tag = 'current_highlight'
 
     def update_dir_listing(self):
         self.dir_listbox.delete(0, tk.END)
@@ -93,6 +102,7 @@ class TextEditor:
 
     def process_query(self, event=None):
         query = self.query_entry.get().strip()
+        
         if query.startswith(':'):
             command = query[1:].lower().split()
             if command[0] == 'q':
@@ -116,11 +126,110 @@ class TextEditor:
                 self.move_item(' '.join(command[1:]))
             elif command[0] == 'info' and len(command) > 1:
                 self.show_item_info(' '.join(command[1:]))
+            elif command[0] == 'f' and len(command) > 1:
+                self.word_to_find = ' '.join(command[1:])
+                self.current_search_position = '1.0'
+                self.highlight_occurrences()
             else:
                 messagebox.showerror("Error", f"Unknown command: {query}")
         else:
             self.navigate_or_open(query)
         self.query_entry.delete(0, tk.END)
+
+    def show_find_dialog(self, count):
+        if self.find_window:
+            self.find_window.destroy()  # Destroy existing window if it exists
+        
+        self.find_window = tk.Toplevel(self.root)
+        self.find_window.title("Find")
+        self.find_window.geometry("300x100")
+        self.find_window.resizable(False, False)
+        
+        label = tk.Label(self.find_window, text=f"Found {count} occurrences of '{self.word_to_find}'.")
+        label.pack(pady=10)
+
+        find_next_button = tk.Button(self.find_window, text="Find Next", command=self.find_next)
+        find_next_button.pack(pady=10)
+
+        # Bind the Enter key to the find_next method
+        self.find_window.bind('<Return>', lambda event: self.find_next())
+
+        # Keep the Find Next window on top
+        self.find_window.attributes('-topmost', True)
+
+        # Bind the closing of the window to remove highlights
+        self.find_window.protocol("WM_DELETE_WINDOW", self.on_find_window_close)
+
+    def on_find_window_close(self):
+        self.remove_highlights()
+        self.find_window.destroy()
+        self.find_window = None
+
+    def remove_highlights(self):
+        current_tab = self.notebook.select()
+        text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
+        text_widget.tag_remove(self.highlight_tag, '1.0', tk.END)
+        text_widget.tag_remove(self.current_highlight_tag, '1.0', tk.END)
+
+    def find_next(self):
+        current_tab = self.notebook.select()
+        text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
+
+        # Remove previous current highlight
+        text_widget.tag_remove(self.current_highlight_tag, '1.0', tk.END)
+
+        start_pos = text_widget.search(self.word_to_find, self.current_search_position, stopindex=tk.END, nocase=True)
+        
+        if not start_pos:
+            start_pos = text_widget.search(self.word_to_find, '1.0', stopindex=tk.END, nocase=True)
+            if not start_pos:
+                messagebox.showinfo("Find", f"Reached the end of the document. No more occurrences of '{self.word_to_find}' found.")
+                self.current_search_position = '1.0'  # Reset to the beginning for the next search
+                return
+
+        end_pos = f"{start_pos}+{len(self.word_to_find)}c"
+        
+        # Highlight the current occurrence
+        text_widget.tag_add(self.current_highlight_tag, start_pos, end_pos)
+        text_widget.see(start_pos)
+
+        # Update the current search position for the next search
+        self.current_search_position = end_pos
+
+        # Bring the Find Next window back to focus
+        if self.find_window:
+            self.find_window.focus_force()
+
+    def highlight_occurrences(self):
+        current_tab = self.notebook.select()
+        text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
+        
+        # Remove any existing highlights
+        self.remove_highlights()
+
+        # Configure tags for highlighting
+        text_widget.tag_configure(self.highlight_tag, background='yellow')
+        text_widget.tag_configure(self.current_highlight_tag, background='orange')
+
+        count = 0
+        start_pos = '1.0'
+        while True:
+            start_pos = text_widget.search(self.word_to_find, start_pos, stopindex=tk.END, nocase=True)
+            if not start_pos:
+                break
+            end_pos = f"{start_pos}+{len(self.word_to_find)}c"
+            text_widget.tag_add(self.highlight_tag, start_pos, end_pos)
+            count += 1
+            start_pos = end_pos
+
+        if count > 0:
+            self.current_search_position = '1.0'  # Reset search position
+            self.show_find_dialog(count)
+            self.find_next()  # Highlight the first occurrence
+        else:
+            messagebox.showinfo("Find", f"No occurrences of '{self.word_to_find}' found.")
+
+
 
     def show_item_info(self, item_name):
         item_path = os.path.join(self.current_dir, item_name)
