@@ -116,6 +116,9 @@ class TextEditor:
 
         # Create the first tab
         self.open_file("Untitled-1")
+        
+        # Maximize the window
+        self.root.state('zoomed')
 
         # Initialize search position
         self.current_search_position = '1.0'
