@@ -3,6 +3,7 @@ from tkinter import ttk, simpledialog, messagebox
 import os
 import datetime
 import shutil
+import re
 
 class TextEditor:
     def __init__(self, root):
@@ -50,12 +51,21 @@ class TextEditor:
         # Create label for entry
         ttk.Label(entry_frame, text="Query:", font=('Arial', 12)).pack(side='left', padx=(0, 5))
 
-        # Create entry field for query
-        self.query_entry = ttk.Entry(entry_frame, font=('Arial', 12))
-        self.query_entry.pack(side='left', expand=True, fill='x', ipady=5)  # ipady adds internal padding to make it taller
+        # Create a frame to hold the Entry and its Scrollbar
+        entry_scroll_frame = ttk.Frame(entry_frame)
+        entry_scroll_frame.pack(side='left', expand=True, fill='x')
+
+        # Create horizontally scrollable entry field for query
+        self.query_entry = ttk.Entry(entry_scroll_frame, font=('Arial', 12))
+        self.query_entry.pack(side='left', expand=True, fill='x')
         self.query_entry.bind('<Return>', self.process_query)
         self.query_entry.bind('<KeyRelease>', self.update_suggestions)
         self.query_entry.bind('<Tab>', self.autofill_suggestion)
+
+        # Create horizontal scrollbar for entry field
+        entry_scrollbar = ttk.Scrollbar(entry_scroll_frame, orient='horizontal', command=self.query_entry.xview)
+        entry_scrollbar.pack(side='bottom', fill='x')
+        self.query_entry.config(xscrollcommand=entry_scrollbar.set)
 
         # Create "Execute" button
         execute_button = ttk.Button(entry_frame, text="Execute", command=self.process_query)
@@ -105,6 +115,11 @@ class TextEditor:
         
         if query.startswith(':'):
             command = query[1:].lower().split()
+            
+            if not command:
+                messagebox.showerror("Error", "Please enter a command after ':'.")
+                return
+            
             if command[0] == 'q':
                 self.close_current_tab()
             elif command[0] == 's':
@@ -130,6 +145,8 @@ class TextEditor:
                 self.word_to_find = ' '.join(command[1:])
                 self.current_search_position = '1.0'
                 self.highlight_occurrences()
+            elif command[0] == 'fr':
+                self.find_and_replace()
             else:
                 messagebox.showerror("Error", f"Unknown command: {query}")
         else:
@@ -199,6 +216,132 @@ class TextEditor:
         # Bring the Find Next window back to focus
         if self.find_window:
             self.find_window.focus_force()
+
+    def find_and_replace(self):
+        current_tab = self.notebook.select()
+        if not current_tab:
+            messagebox.showerror("Error", "No file is currently open.")
+            return
+
+        text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
+
+        # Create a new top-level window
+        fr_window = tk.Toplevel(self.root)
+        fr_window.title("Find and Replace")
+        fr_window.geometry("300x120")
+
+        # Find entry
+        tk.Label(fr_window, text="Find:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
+        find_entry = tk.Entry(fr_window, width=30)
+        find_entry.grid(row=0, column=1, padx=5, pady=5)
+
+        # Replace entry
+        tk.Label(fr_window, text="Replace with:").grid(row=1, column=0, padx=5, pady=5, sticky="e")
+        replace_entry = tk.Entry(fr_window, width=30)
+        replace_entry.grid(row=1, column=1, padx=5, pady=5)
+
+        def on_find_entry_change(*args):
+            find_text = find_entry.get()
+            if find_text:
+                self.highlight_all_occurrences(find_text)
+                self.move_to_next_occurrence()
+            else:
+                self.clear_all_highlights()
+
+        find_entry.bind('<KeyRelease>', on_find_entry_change)
+
+        def replace():
+            find_text = find_entry.get()
+            replace_text = replace_entry.get()
+            if not find_text:
+                messagebox.showwarning("Warning", "Find field is empty.")
+                return
+            
+            # Get the current orange highlight position
+            ranges = text_widget.tag_ranges(self.current_highlight_tag)
+            if ranges:
+                start, end = ranges[0], ranges[1]
+                text_widget.delete(start, end)
+                text_widget.insert(start, replace_text)
+                
+                # Remove the orange highlight
+                text_widget.tag_remove(self.current_highlight_tag, start, text_widget.index(f"{start}+{len(replace_text)}c"))
+                
+                # Move to the next occurrence
+                self.move_to_next_occurrence()
+            else:
+                messagebox.showinfo("Find and Replace", "No current selection to replace.")
+
+        def replace_all():
+            find_text = find_entry.get()
+            replace_text = replace_entry.get()
+            if not find_text:
+                messagebox.showwarning("Warning", "Find field is empty.")
+                return
+            
+            content = text_widget.get("1.0", tk.END)
+            new_content, count = re.subn(re.escape(find_text), replace_text, content)  # Removed flags=re.IGNORECASE
+            text_widget.delete("1.0", tk.END)
+            text_widget.insert("1.0", new_content)
+            messagebox.showinfo("Find and Replace", f"Replaced {count} occurrence(s).")
+            
+            # Clear all highlights after replace all
+            self.clear_all_highlights()
+
+        # Buttons
+        tk.Button(fr_window, text="Replace", command=replace).grid(row=2, column=0, padx=5, pady=5, sticky="ew")
+        tk.Button(fr_window, text="Replace All", command=replace_all).grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+
+    def highlight_all_occurrences(self, word):
+        current_tab = self.notebook.select()
+        text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
+        
+        # Remove any existing highlights
+        self.clear_all_highlights()
+
+        # Configure tags for highlighting
+        text_widget.tag_configure(self.highlight_tag, background='yellow')
+        text_widget.tag_configure(self.current_highlight_tag, background='orange')
+
+        start_pos = '1.0'
+        while True:
+            start_pos = text_widget.search(word, start_pos, stopindex=tk.END, exact=True)  # Added exact=True for case sensitivity
+            if not start_pos:
+                break
+            end_pos = f"{start_pos}+{len(word)}c"
+            text_widget.tag_add(self.highlight_tag, start_pos, end_pos)
+            start_pos = end_pos
+
+        self.word_to_find = word
+        self.current_search_position = '1.0'
+
+    def move_to_next_occurrence(self):
+        current_tab = self.notebook.select()
+        text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
+
+        # Remove current highlight
+        text_widget.tag_remove(self.current_highlight_tag, '1.0', tk.END)
+
+        start_pos = text_widget.search(self.word_to_find, self.current_search_position, stopindex=tk.END, exact=True)  # Added exact=True for case sensitivity
+        if not start_pos:
+            # If not found from current position, start from the beginning
+            start_pos = text_widget.search(self.word_to_find, '1.0', stopindex=tk.END, exact=True)  # Added exact=True for case sensitivity
+            if not start_pos:
+                self.current_search_position = '1.0'  # Reset search position to beginning
+                return  # No occurrences found, don't show a message box
+
+        end_pos = f"{start_pos}+{len(self.word_to_find)}c"
+        text_widget.tag_add(self.current_highlight_tag, start_pos, end_pos)
+        text_widget.see(start_pos)
+        text_widget.mark_set(tk.INSERT, end_pos)
+
+        self.current_search_position = end_pos
+
+    def clear_all_highlights(self):
+        current_tab = self.notebook.select()
+        text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
+        text_widget.tag_remove(self.highlight_tag, '1.0', tk.END)
+        text_widget.tag_remove(self.current_highlight_tag, '1.0', tk.END)
 
     def highlight_occurrences(self):
         current_tab = self.notebook.select()
@@ -598,6 +741,7 @@ class TextEditor:
                     self.query_entry.insert(0, best_match)
         
         self.query_entry.icursor(tk.END)  # Move cursor to end of entry
+        self.query_entry.xview_moveto(1)  # Scroll to the end
         return 'break'  # Prevent default Tab behavior
 
     def use_suggestion(self, event):
