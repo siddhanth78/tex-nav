@@ -227,15 +227,28 @@ class TextEditor:
         self.find_window.destroy()
         self.find_window = None
 
-    def remove_highlights(self):
-        current_tab = self.notebook.select()
-        text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
+    def remove_highlights(self, text_widget=None):
+        if text_widget is None:
+            current_tab = self.notebook.select()
+            if not current_tab:
+                return
+            text_widget = self.get_text_widget(self.notebook.nametowidget(current_tab))
+            if text_widget is None:
+                return
+
         text_widget.tag_remove(self.highlight_tag, '1.0', tk.END)
         text_widget.tag_remove(self.current_highlight_tag, '1.0', tk.END)
 
     def find_next(self):
         current_tab = self.notebook.select()
-        text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
+        if not current_tab:
+            messagebox.showerror("Error", "No file is currently open.")
+            return
+
+        text_widget = self.get_text_widget(self.notebook.nametowidget(current_tab))
+        if text_widget is None:
+            messagebox.showerror("Error", "Cannot find text widget in the current tab.")
+            return
 
         # Remove previous current highlight
         text_widget.tag_remove(self.current_highlight_tag, '1.0', tk.END)
@@ -268,7 +281,10 @@ class TextEditor:
             messagebox.showerror("Error", "No file is currently open.")
             return
 
-        text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
+        text_widget = self.get_text_widget(self.notebook.nametowidget(current_tab))
+        if text_widget is None:
+            messagebox.showerror("Error", "Cannot find text widget in the current tab.")
+            return
 
         # Create a new top-level window
         fr_window = tk.Toplevel(self.root)
@@ -288,10 +304,10 @@ class TextEditor:
         def on_find_entry_change(*args):
             find_text = find_entry.get()
             if find_text:
-                self.highlight_all_occurrences(find_text)
-                self.move_to_next_occurrence()
+                self.highlight_all_occurrences(find_text, text_widget)
+                self.move_to_next_occurrence(text_widget)
             else:
-                self.clear_all_highlights()
+                self.clear_all_highlights(text_widget)
 
         find_entry.bind('<KeyRelease>', on_find_entry_change)
 
@@ -313,7 +329,7 @@ class TextEditor:
                 text_widget.tag_remove(self.current_highlight_tag, start, text_widget.index(f"{start}+{len(replace_text)}c"))
                 
                 # Move to the next occurrence
-                self.move_to_next_occurrence()
+                self.move_to_next_occurrence(text_widget)
             else:
                 messagebox.showinfo("Find and Replace", "No current selection to replace.")
 
@@ -325,32 +341,29 @@ class TextEditor:
                 return
             
             content = text_widget.get("1.0", tk.END)
-            new_content, count = re.subn(re.escape(find_text), replace_text, content)  # Removed flags=re.IGNORECASE
+            new_content, count = re.subn(re.escape(find_text), replace_text, content)
             text_widget.delete("1.0", tk.END)
             text_widget.insert("1.0", new_content)
             messagebox.showinfo("Find and Replace", f"Replaced {count} occurrence(s).")
             
             # Clear all highlights after replace all
-            self.clear_all_highlights()
+            self.clear_all_highlights(text_widget)
 
         # Buttons
         tk.Button(fr_window, text="Replace", command=replace).grid(row=2, column=0, padx=5, pady=5, sticky="ew")
         tk.Button(fr_window, text="Replace All", command=replace_all).grid(row=2, column=1, padx=5, pady=5, sticky="ew")
 
-    def highlight_all_occurrences(self, word):
-        current_tab = self.notebook.select()
-        text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
-        
+    def highlight_all_occurrences(self, word, text_widget):
         # Remove any existing highlights
-        self.clear_all_highlights()
+        self.clear_all_highlights(text_widget)
 
         # Configure tags for highlighting
-        text_widget.tag_configure(self.highlight_tag, background='yellow')
-        text_widget.tag_configure(self.current_highlight_tag, background='orange')
+        text_widget.tag_configure(self.highlight_tag, background='yellow', foreground='black')
+        text_widget.tag_configure(self.current_highlight_tag, background='orange', foreground='black')
 
         start_pos = '1.0'
         while True:
-            start_pos = text_widget.search(word, start_pos, stopindex=tk.END, exact=True)  # Added exact=True for case sensitivity
+            start_pos = text_widget.search(word, start_pos, stopindex=tk.END, exact=True)
             if not start_pos:
                 break
             end_pos = f"{start_pos}+{len(word)}c"
@@ -360,17 +373,14 @@ class TextEditor:
         self.word_to_find = word
         self.current_search_position = '1.0'
 
-    def move_to_next_occurrence(self):
-        current_tab = self.notebook.select()
-        text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
-
+    def move_to_next_occurrence(self, text_widget):
         # Remove current highlight
         text_widget.tag_remove(self.current_highlight_tag, '1.0', tk.END)
 
-        start_pos = text_widget.search(self.word_to_find, self.current_search_position, stopindex=tk.END, exact=True)  # Added exact=True for case sensitivity
+        start_pos = text_widget.search(self.word_to_find, self.current_search_position, stopindex=tk.END, exact=True)
         if not start_pos:
             # If not found from current position, start from the beginning
-            start_pos = text_widget.search(self.word_to_find, '1.0', stopindex=tk.END, exact=True)  # Added exact=True for case sensitivity
+            start_pos = text_widget.search(self.word_to_find, '1.0', stopindex=tk.END, exact=True)
             if not start_pos:
                 self.current_search_position = '1.0'  # Reset search position to beginning
                 return  # No occurrences found, don't show a message box
@@ -382,22 +392,27 @@ class TextEditor:
 
         self.current_search_position = end_pos
 
-    def clear_all_highlights(self):
-        current_tab = self.notebook.select()
-        text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
+    def clear_all_highlights(self, text_widget):
         text_widget.tag_remove(self.highlight_tag, '1.0', tk.END)
         text_widget.tag_remove(self.current_highlight_tag, '1.0', tk.END)
 
     def highlight_occurrences(self):
         current_tab = self.notebook.select()
-        text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
+        if not current_tab:
+            messagebox.showerror("Error", "No file is currently open.")
+            return
+
+        text_widget = self.get_text_widget(self.notebook.nametowidget(current_tab))
+        if text_widget is None:
+            messagebox.showerror("Error", "Cannot find text widget in the current tab.")
+            return
         
         # Remove any existing highlights
-        self.remove_highlights()
+        self.remove_highlights(text_widget)
 
         # Configure tags for highlighting
-        text_widget.tag_configure(self.highlight_tag, background='yellow')
-        text_widget.tag_configure(self.current_highlight_tag, background='orange')
+        text_widget.tag_configure(self.highlight_tag, background='yellow', foreground='black')
+        text_widget.tag_configure(self.current_highlight_tag, background='orange', foreground='black')
 
         count = 0
         start_pos = '1.0'
@@ -672,11 +687,21 @@ class TextEditor:
         else:
             # Don't create the file immediately, just open a new tab
             self.open_file(file_name)
+            
+    def get_text_widget(self, tab):
+        text_frame = tab.winfo_children()[0]
+        for child in text_frame.winfo_children():
+            if isinstance(child, tk.Text):
+                return child
+        return None
 
     def save_current_file(self):
         current_tab = self.notebook.select()
         tab_name = self.notebook.tab(current_tab, "text")
-        text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
+        text_widget = self.get_text_widget(self.notebook.nametowidget(current_tab))
+        if text_widget is None:
+            messagebox.showerror("Error", "Cannot find text widget in the current tab.")
+            return
         content = text_widget.get("1.0", tk.END)
 
         if tab_name.startswith("Untitled"):
@@ -703,10 +728,10 @@ class TextEditor:
             current_tab = self.notebook.select()
             self.notebook.forget(current_tab)
         else:
-            # If it's the last tab, clear its content and rename to Untitled-1
             current_tab = self.notebook.select()
-            text_widget = [child for child in self.notebook.nametowidget(current_tab).winfo_children() if isinstance(child, tk.Text)][0]
-            text_widget.delete('1.0', tk.END)
+            text_widget = self.get_text_widget(self.notebook.nametowidget(current_tab))
+            if text_widget is not None:
+                text_widget.delete('1.0', tk.END)
             self.notebook.tab(current_tab, text="Untitled-1")
 
     def open_selected_file(self, event):
