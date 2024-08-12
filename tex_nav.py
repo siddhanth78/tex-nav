@@ -5,83 +5,110 @@ import datetime
 import shutil
 import re
 
+
+
 class TextEditor:
     def __init__(self, root):
         self.root = root
         self.root.title("TEX-NAV")
         self.root.geometry("1200x600")
 
-        # Create main paned window
-        self.main_paned = tk.PanedWindow(self.root, orient=tk.HORIZONTAL)
-        self.main_paned.pack(fill=tk.BOTH, expand=1)
-        
-        # Maximize the window
-        self.root.state('zoomed')
+        # Configure dark mode colors
+        self.bg_color = "#2E2E2E"  # Dark grey
+        self.fg_color = "white"
+        self.highlight_bg = "#4A4A4A"  # Lighter grey for highlights
 
-        # Create left paned window for directory listing and editor
-        self.left_paned = tk.PanedWindow(self.main_paned, orient=tk.HORIZONTAL)
-        self.main_paned.add(self.left_paned)
+        # Default font sizes
+        self.editor_font_size = 12
+        self.query_font_size = 12
 
-        # Create frame for directory listing
-        self.dir_frame = ttk.Frame(self.left_paned)
-        self.left_paned.add(self.dir_frame)
+        # Configure styles
+        self.style = ttk.Style()
+        self.style.theme_use('default')
+        self.style.configure('TFrame', background=self.bg_color)
+        self.style.configure('TNotebook', background=self.bg_color)
+        self.style.configure('TNotebook.Tab', background=self.bg_color, foreground=self.fg_color)
+        self.style.map('TNotebook.Tab', background=[('selected', self.highlight_bg)])
+        self.style.configure('TButton', background=self.bg_color, foreground=self.fg_color)
+        self.style.configure('TLabel', background=self.bg_color, foreground=self.fg_color)
 
-        # Create listbox for directory contents
-        self.dir_listbox = tk.Listbox(self.dir_frame)
-        self.dir_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        # Main frame
+        main_frame = ttk.Frame(root)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        main_frame.grid_columnconfigure(1, weight=1)
+        main_frame.grid_rowconfigure(0, weight=1)
+
+        # Left frame for directory listing and suggestions
+        left_frame = ttk.Frame(main_frame, width=200)
+        left_frame.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=5, pady=5)
+        left_frame.grid_propagate(False)  # Prevent the frame from changing size
+        left_frame.grid_columnconfigure(0, weight=1)
+        left_frame.grid_rowconfigure(0, weight=1)
+        left_frame.grid_rowconfigure(2, weight=1)
+
+        # Directory listing
+        dir_frame = ttk.Frame(left_frame)
+        dir_frame.grid(row=0, column=0, sticky="nsew")
+        dir_frame.grid_columnconfigure(0, weight=1)
+        dir_frame.grid_rowconfigure(0, weight=1)
+
+        self.dir_listbox = tk.Listbox(dir_frame, bg=self.bg_color, fg=self.fg_color)
+        self.dir_listbox.grid(row=0, column=0, sticky="nsew")
         self.dir_listbox.bind('<Double-1>', self.open_selected_file)
 
-        # Create scrollbar for listbox
-        scrollbar = ttk.Scrollbar(self.dir_frame, orient="vertical", command=self.dir_listbox.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.dir_listbox.config(yscrollcommand=scrollbar.set)
+        # Scrollbar for directory listing
+        dir_scrollbar = ttk.Scrollbar(dir_frame, orient="vertical", command=self.dir_listbox.yview)
+        dir_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.dir_listbox.config(yscrollcommand=dir_scrollbar.set)
 
-        # Create frame for editor
-        editor_frame = ttk.Frame(self.left_paned)
-        self.left_paned.add(editor_frame)
+        # Small gap
+        ttk.Frame(left_frame, height=10).grid(row=1, column=0)
 
-        # Create notebook (tabbed interface)
+        # Suggestions
+        suggestion_frame = ttk.Frame(left_frame)
+        suggestion_frame.grid(row=2, column=0, sticky="nsew")
+        suggestion_frame.grid_columnconfigure(0, weight=1)
+        suggestion_frame.grid_rowconfigure(1, weight=1)
+
+        ttk.Label(suggestion_frame, text="Top 10 Suggestions", font=('Arial', 10, 'bold')).grid(row=0, column=0, pady=(0, 5), sticky="nw")
+        self.suggestion_listbox = tk.Listbox(suggestion_frame, bg=self.bg_color, fg=self.fg_color)
+        self.suggestion_listbox.grid(row=1, column=0, sticky="nsew")
+        self.suggestion_listbox.bind('<Double-1>', self.use_suggestion)
+
+        # Scrollbar for suggestions
+        suggestion_scrollbar = ttk.Scrollbar(suggestion_frame, orient="vertical", command=self.suggestion_listbox.yview)
+        suggestion_scrollbar.grid(row=1, column=1, sticky="ns")
+        self.suggestion_listbox.config(yscrollcommand=suggestion_scrollbar.set)
+
+        # Editor frame
+        editor_frame = ttk.Frame(main_frame)
+        editor_frame.grid(row=0, column=1, sticky="nsew")
+        editor_frame.grid_propagate(False)  # Prevent the frame from changing size
+        editor_frame.grid_columnconfigure(0, weight=1)
+        editor_frame.grid_rowconfigure(0, weight=1)
+
+        # Notebook (tabbed interface)
         self.notebook = ttk.Notebook(editor_frame)
-        self.notebook.pack(expand=True, fill='both')
+        self.notebook.grid(row=0, column=0, sticky="nsew")
 
-         # Create frame for entry field
-        entry_frame = ttk.Frame(editor_frame)
-        entry_frame.pack(side='bottom', fill='x', padx=5, pady=5)
+        # Query frame
+        query_frame = ttk.Frame(main_frame)
+        query_frame.grid(row=1, column=1, sticky="ew", pady=(5, 0))
+        query_frame.grid_columnconfigure(1, weight=1)
 
-        # Create label for entry
-        ttk.Label(entry_frame, text="Query:", font=('Arial', 12)).pack(side='left', padx=(0, 5))
+        # Query label
+        ttk.Label(query_frame, text="Query:", font=('Arial', self.query_font_size)).grid(row=0, column=0, padx=(0, 5))
 
-        # Create a frame to hold the Entry and its Scrollbar
-        entry_scroll_frame = ttk.Frame(entry_frame)
-        entry_scroll_frame.pack(side='left', expand=True, fill='x')
-
-        # Create horizontally scrollable entry field for query
-        self.query_entry = ttk.Entry(entry_scroll_frame, font=('Arial', 12))
-        self.query_entry.pack(side='left', expand=True, fill='x')
+        # Query entry
+        self.query_entry = ttk.Entry(query_frame, font=('Arial', self.query_font_size))
+        self.query_entry.grid(row=0, column=1, sticky="ew")
         self.query_entry.bind('<Return>', self.process_query)
         self.query_entry.bind('<KeyRelease>', self.update_suggestions)
         self.query_entry.bind('<Tab>', self.autofill_suggestion)
 
-        # Create horizontal scrollbar for entry field
-        entry_scrollbar = ttk.Scrollbar(entry_scroll_frame, orient='horizontal', command=self.query_entry.xview)
-        entry_scrollbar.pack(side='bottom', fill='x')
-        self.query_entry.config(xscrollcommand=entry_scrollbar.set)
-
-        # Create "Execute" button
-        execute_button = ttk.Button(entry_frame, text="Execute", command=self.process_query)
-        execute_button.pack(side='right', padx=(5, 0))
-
-        # Create frame for suggestions
-        self.suggestion_frame = ttk.Frame(self.main_paned)
-        self.main_paned.add(self.suggestion_frame)
-
-        # Create label for suggestions
-        ttk.Label(self.suggestion_frame, text="Top 10 Suggestions", font=('Arial', 10, 'bold')).pack(pady=(5,0))
-
-        # Create listbox for suggestions
-        self.suggestion_listbox = tk.Listbox(self.suggestion_frame)
-        self.suggestion_listbox.pack(fill=tk.BOTH, expand=1, padx=5, pady=5)
-        self.suggestion_listbox.bind('<Double-1>', self.use_suggestion)
+        # Execute button
+        execute_button = ttk.Button(query_frame, text="Execute", command=self.process_query, style='TButton')
+        execute_button.grid(row=0, column=2, padx=(5, 0))
 
         # Set initial directory
         self.current_dir = os.path.expanduser('~')
@@ -90,11 +117,6 @@ class TextEditor:
         # Create the first tab
         self.open_file("Untitled-1")
 
-        # Adjust paned window sash positions
-        self.root.update()
-        self.main_paned.sash_place(0, int(self.root.winfo_width() * 0.8), 0)  # 80% for left pane
-        self.left_paned.sash_place(0, int(self.root.winfo_width() * 0.3), 0)  # 30% for directory listing
-        
         # Initialize search position
         self.current_search_position = '1.0'
         self.word_to_find = ""
@@ -147,11 +169,31 @@ class TextEditor:
                 self.highlight_occurrences()
             elif command[0] == 'fr':
                 self.find_and_replace()
+            elif command[0] == 'fs' and len(command) > 1:
+                self.change_font_size(command[1])
             else:
                 messagebox.showerror("Error", f"Unknown command: {query}")
         else:
             self.navigate_or_open(query)
         self.query_entry.delete(0, tk.END)
+
+    def change_font_size(self, size):
+        try:
+            new_size = int(size)
+            if new_size < 8 or new_size > 72:
+                messagebox.showerror("Error", "Font size must be between 8 and 72.")
+                return
+            self.font_size = new_size
+            self.update_all_text_widgets()
+            messagebox.showinfo("Font Size", f"Font size changed to {new_size}.")
+        except ValueError:
+            messagebox.showerror("Error", "Invalid font size. Please enter a number between 8 and 72.")
+
+    def update_all_text_widgets(self):
+        for tab in self.notebook.tabs():
+            text_frame = self.notebook.nametowidget(tab).winfo_children()[0]
+            text_widget = [child for child in text_frame.winfo_children() if isinstance(child, tk.Text)][0]
+            text_widget.configure(font=('Arial', self.font_size))
 
     def show_find_dialog(self, count):
         if self.find_window:
@@ -582,10 +624,28 @@ class TextEditor:
 
         # If we're here, the file isn't already open, so create a new tab
         tab = ttk.Frame(self.notebook)
+        tab.grid_columnconfigure(0, weight=1)
+        tab.grid_rowconfigure(0, weight=1)
         
-        # Create a text widget in the tab
-        text_area = tk.Text(tab)
-        text_area.pack(expand=True, fill='both')
+        # Create a frame to hold the text widget and scrollbars
+        text_frame = ttk.Frame(tab)
+        text_frame.grid(row=0, column=0, sticky="nsew")
+        text_frame.grid_columnconfigure(0, weight=1)
+        text_frame.grid_rowconfigure(0, weight=1)
+
+        # Create a text widget in the tab with dark mode colors
+        text_area = tk.Text(text_frame, bg=self.bg_color, fg=self.fg_color, insertbackground=self.fg_color, font=('Arial', self.editor_font_size), wrap='none')
+        text_area.grid(row=0, column=0, sticky="nsew")
+
+        # Create vertical scrollbar for text widget
+        v_scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=text_area.yview)
+        v_scrollbar.grid(row=0, column=1, sticky="ns")
+        text_area.config(yscrollcommand=v_scrollbar.set)
+
+        # Create horizontal scrollbar for text widget
+        h_scrollbar = ttk.Scrollbar(tab, orient="horizontal", command=text_area.xview)
+        h_scrollbar.grid(row=1, column=0, sticky="ew")
+        text_area.config(xscrollcommand=h_scrollbar.set)
 
         # If the file exists, read its contents
         if os.path.exists(file_path):
