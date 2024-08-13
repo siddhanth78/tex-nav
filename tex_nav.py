@@ -68,7 +68,7 @@ class TextEditor:
         suggestion_frame.grid_columnconfigure(0, weight=1)
         suggestion_frame.grid_rowconfigure(1, weight=1)
 
-        ttk.Label(suggestion_frame, text="Top 10 Suggestions", font=('Arial', 10, 'bold')).grid(row=0, column=0, pady=(0, 5), sticky="nw")
+        ttk.Label(suggestion_frame, text="Top 10 Suggestions", font=('Courier', 10, 'bold')).grid(row=0, column=0, pady=(0, 5), sticky="nw")
         self.suggestion_listbox = tk.Listbox(suggestion_frame, bg=self.bg_color, fg=self.fg_color)
         self.suggestion_listbox.grid(row=1, column=0, sticky="nsew")
         self.suggestion_listbox.bind('<Double-1>', self.use_suggestion)
@@ -95,10 +95,10 @@ class TextEditor:
         query_frame.grid_columnconfigure(1, weight=1)
 
         # Query label
-        ttk.Label(query_frame, text="Query:", font=('Arial', self.query_font_size)).grid(row=0, column=0, padx=(0, 5))
+        ttk.Label(query_frame, text="Query:", font=('Courier', self.query_font_size)).grid(row=0, column=0, padx=(0, 5))
 
         # Query entry
-        self.query_entry = ttk.Entry(query_frame, font=('Arial', self.query_font_size))
+        self.query_entry = ttk.Entry(query_frame, font=('Courier', self.query_font_size))
         self.query_entry.grid(row=0, column=1, sticky="ew")
         self.query_entry.bind('<Return>', self.process_query)
         self.query_entry.bind('<KeyRelease>', self.update_suggestions)
@@ -355,7 +355,7 @@ class TextEditor:
         for tab in self.notebook.tabs():
             text_frame = self.notebook.nametowidget(tab).winfo_children()[0]
             text_widget = [child for child in text_frame.winfo_children() if isinstance(child, tk.Text)][0]
-            text_widget.configure(font=('Arial', self.font_size))
+            text_widget.configure(font=('Courier', self.font_size))
 
     def show_find_dialog(self, count):
         if self.find_window:
@@ -872,7 +872,7 @@ class TextEditor:
         text_frame.grid_rowconfigure(0, weight=1)
 
         # Create a text widget in the tab with dark mode colors
-        text_area = tk.Text(text_frame, bg=self.bg_color, fg=self.fg_color, insertbackground=self.fg_color, font=('Arial', self.editor_font_size), wrap='none')
+        text_area = tk.Text(text_frame, bg=self.bg_color, fg=self.fg_color, insertbackground=self.fg_color, font=('Courier', self.editor_font_size), wrap='none')
         text_area.grid(row=0, column=0, sticky="nsew")
 
         # Create vertical scrollbar for text widget
