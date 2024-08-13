@@ -17,8 +17,14 @@ class TextEditor:
         self.highlight_bg = "#4A4A4A"  # Lighter grey for highlights
 
         # Default font sizes
-        self.editor_font_size = 12
+        self.font_size = 12
         self.query_font_size = 12
+        
+        self.line_numbers_enabled = True
+        self.line_numbers = None
+        self.text_area = None
+        
+        self.editor_font = ('Courier', self.font_size)
 
         # Configure styles
         self.style = ttk.Style()
@@ -180,12 +186,14 @@ class TextEditor:
             text_widget = self.get_text_widget(self.notebook.nametowidget(tab))
             if text_widget:
                 text_widget.bind('<Return>', self.auto_indent)
-                text_widget.bind('<colon>', self.handle_colon)
                 text_widget.bind('<Tab>', self.handle_tab)
                 text_widget.bind('<Shift-Tab>', self.handle_shift_tab)
                 
     def auto_indent(self, event):
-        text_widget = event.widget
+        if not self.text_area:
+            return 'break'
+        
+        text_widget = self.text_area
         cursor_pos = text_widget.index(tk.INSERT)
         line_num = int(cursor_pos.split('.')[0])
         line = text_widget.get(f"{line_num}.0", f"{line_num}.end")
@@ -196,28 +204,14 @@ class TextEditor:
         # Insert the new line with the same indentation
         text_widget.insert(tk.INSERT, f"\n{indentation}")
         
+        self.update_line_numbers()  # Update line numbers after auto-indent
         return 'break'  # Prevent the default behavior
         
-    def handle_colon(self, event):
-        text_widget = event.widget
-        cursor_pos = text_widget.index(tk.INSERT)
-        line_num, col_num = map(int, cursor_pos.split('.'))
-        line = text_widget.get(f"{line_num}.0", f"{line_num}.end")
-        
-        # Insert the colon
-        text_widget.insert(tk.INSERT, ':')
-        
-        # Check if the colon is at the end of the line (ignoring whitespace)
-        if line.strip() == '' or col_num >= len(line.rstrip()):
-            current_indent = re.match(r'^(\s*)', line).group(1)
-            next_indent = current_indent + self.get_indent_string()
-            text_widget.insert(tk.INSERT, f"\n{next_indent}")
-            return 'break'  # Prevent the default behavior
-        
-        return 'break'  # Prevent default colon insertion since we've already inserted it
-        
     def handle_tab(self, event):
-        text_widget = event.widget
+        if not self.text_area:
+            return None
+        
+        text_widget = self.text_area
         try:
             sel_start = text_widget.index("sel.first")
             sel_end = text_widget.index("sel.last")
@@ -226,7 +220,9 @@ class TextEditor:
             selected = False
 
         if selected:
-            return self.indent_selected_lines(text_widget, sel_start, sel_end)
+            result = self.indent_selected_lines(text_widget, sel_start, sel_end)
+            self.update_line_numbers()  # Update line numbers after indentation
+            return result
         else:
             # Existing behavior for when there's no selection
             cursor_pos = text_widget.index(tk.INSERT)
@@ -235,12 +231,16 @@ class TextEditor:
             
             if col_num == 0 or line[:col_num].isspace():
                 text_widget.insert(tk.INSERT, self.get_indent_string())
+                self.update_line_numbers()  # Update line numbers after adding indentation
                 return 'break'
             
             return None  # Allow default tab behavior elsewhere
     
     def handle_shift_tab(self, event):
-        text_widget = event.widget
+        if not self.text_area:
+            return None
+        
+        text_widget = self.text_area
         try:
             sel_start = text_widget.index("sel.first")
             sel_end = text_widget.index("sel.last")
@@ -249,12 +249,15 @@ class TextEditor:
             selected = False
 
         if selected:
-            return self.unindent_selected_lines(text_widget, sel_start, sel_end)
+            result = self.unindent_selected_lines(text_widget, sel_start, sel_end)
         else:
             # Unindent current line if no selection
             cursor_pos = text_widget.index(tk.INSERT)
             line_num = int(cursor_pos.split('.')[0])
-            return self.unindent_selected_lines(text_widget, f"{line_num}.0", f"{line_num}.end")
+            result = self.unindent_selected_lines(text_widget, f"{line_num}.0", f"{line_num}.end")
+        
+        self.update_line_numbers()  # Update line numbers after unindentation
+        return result
             
     def indent_selected_lines(self, text_widget, sel_start, sel_end):
         start_line = int(sel_start.split('.')[0])
@@ -346,6 +349,7 @@ class TextEditor:
                 messagebox.showerror("Error", "Font size must be between 8 and 72.")
                 return
             self.font_size = new_size
+            self.editor_font = ('Courier', self.font_size)
             self.update_all_text_widgets()
             messagebox.showinfo("Font Size", f"Font size changed to {new_size}.")
         except ValueError:
@@ -353,9 +357,12 @@ class TextEditor:
 
     def update_all_text_widgets(self):
         for tab in self.notebook.tabs():
-            text_frame = self.notebook.nametowidget(tab).winfo_children()[0]
-            text_widget = [child for child in text_frame.winfo_children() if isinstance(child, tk.Text)][0]
-            text_widget.configure(font=('Courier', self.font_size))
+            tab_widget = self.notebook.nametowidget(tab)
+            text_frame = tab_widget.winfo_children()[0]
+            for child in text_frame.winfo_children():
+                if isinstance(child, tk.Text):
+                    child.configure(font=self.editor_font)
+        self.update_line_numbers()  # Ensure line numbers are updated with new font
 
     def show_find_dialog(self, count):
         if self.find_window:
@@ -852,11 +859,9 @@ class TextEditor:
             tab_path = os.path.join(self.current_dir, tab_text)
             if os.path.exists(file_path) and os.path.exists(tab_path):
                 if os.path.samefile(file_path, tab_path):
-                    # File is already open, just switch to that tab
                     self.notebook.select(tab)
                     return
             elif tab_text == file_name:
-                # For new files, compare just the names
                 self.notebook.select(tab)
                 return
 
@@ -865,45 +870,92 @@ class TextEditor:
         tab.grid_columnconfigure(0, weight=1)
         tab.grid_rowconfigure(0, weight=1)
         
-        # Create a frame to hold the text widget and scrollbars
+        # Create a frame to hold the text widget, line numbers, and scrollbars
         text_frame = ttk.Frame(tab)
         text_frame.grid(row=0, column=0, sticky="nsew")
-        text_frame.grid_columnconfigure(0, weight=1)
+        text_frame.grid_columnconfigure(1, weight=1)
         text_frame.grid_rowconfigure(0, weight=1)
 
-        # Create a text widget in the tab with dark mode colors
-        text_area = tk.Text(text_frame, bg=self.bg_color, fg=self.fg_color, insertbackground=self.fg_color, font=('Courier', self.editor_font_size), wrap='none')
-        text_area.grid(row=0, column=0, sticky="nsew")
+        # Create a text widget for line numbers
+        self.line_numbers = tk.Text(text_frame, width=4, padx=4, takefocus=0, border=0,
+                                    background=self.bg_color, foreground='gray',
+                                    state='disabled', wrap='none', font=self.editor_font)
+        self.line_numbers.grid(row=0, column=0, sticky="nsew")
+
+        # Create the main text widget
+        self.text_area = tk.Text(text_frame, bg=self.bg_color, fg=self.fg_color,
+                                 insertbackground=self.fg_color,
+                                 font=('Courier', self.font_size), wrap='none')
+        self.text_area.grid(row=0, column=1, sticky="nsew")
 
         # Create vertical scrollbar for text widget
-        v_scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=text_area.yview)
-        v_scrollbar.grid(row=0, column=1, sticky="ns")
-        text_area.config(yscrollcommand=v_scrollbar.set)
+        v_scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=self.on_scrollbar_y)
+        v_scrollbar.grid(row=0, column=2, sticky="ns")
+        self.text_area.config(yscrollcommand=v_scrollbar.set)
 
         # Create horizontal scrollbar for text widget
-        h_scrollbar = ttk.Scrollbar(tab, orient="horizontal", command=text_area.xview)
+        h_scrollbar = ttk.Scrollbar(tab, orient="horizontal", command=self.text_area.xview)
         h_scrollbar.grid(row=1, column=0, sticky="ew")
-        text_area.config(xscrollcommand=h_scrollbar.set)
+        self.text_area.config(xscrollcommand=h_scrollbar.set)
 
         # If the file exists, read its contents
         if os.path.exists(file_path):
             with open(file_path, 'r') as file:
                 content = file.read()
-                text_area.insert(tk.END, content)
+                self.text_area.insert(tk.END, content)
         
         # Add the tab to the notebook
         self.notebook.add(tab, text=file_name)
 
         # Store the full file path in the text widget
-        text_area.file_path = file_path
+        self.text_area.file_path = file_path
 
         # Switch to the new tab
         self.notebook.select(tab)
         
-        text_area.bind('<Return>', self.auto_indent)
-        text_area.bind('<colon>', self.handle_colon)
-        text_area.bind('<Tab>', self.handle_tab)
-        text_area.bind('<Shift-Tab>', self.handle_shift_tab)
+        self.text_area.bind('<KeyRelease>', self.on_text_change)
+        self.text_area.bind('<Return>', self.auto_indent)
+        self.text_area.bind('<Tab>', self.handle_tab)
+        self.text_area.bind('<Shift-Tab>', self.handle_shift_tab)
+        self.text_area.bind('<<Change>>', self.on_text_change)
+        self.text_area.bind('<Configure>', self.on_text_change)
+
+        self.update_line_numbers()
+
+    def on_scrollbar_y(self, *args):
+        self.text_area.yview_moveto(args[1])
+        self.line_numbers.yview_moveto(args[1])
+
+    def on_text_change(self, event=None):
+        self.update_line_numbers()
+
+    def update_line_numbers(self):
+        if not self.line_numbers_enabled or not self.line_numbers or not self.text_area:
+            return
+
+        # Get the total number of lines in the text widget
+        total_lines = self.text_area.get('1.0', tk.END).count('\n')
+
+        # Generate line numbers
+        line_numbers_text = '\n'.join(str(i) for i in range(1, total_lines + 1))
+
+        # Update line numbers
+        self.line_numbers.config(state='normal', font=self.editor_font)
+        self.line_numbers.delete('1.0', tk.END)
+        self.line_numbers.insert('1.0', line_numbers_text)
+        self.line_numbers.config(state='disabled')
+
+        # Update the width of line numbers widget based on the number of lines
+        width = len(str(total_lines))
+        self.line_numbers.config(width=width + 1)  # +1 for some padding
+
+    def toggle_line_numbers(self):
+        self.line_numbers_enabled = not self.line_numbers_enabled
+        if self.line_numbers_enabled:
+            self.line_numbers.grid()
+            self.update_line_numbers()
+        else:
+            self.line_numbers.grid_remove()
 
     def create_new_file(self, file_name):
         file_path = os.path.join(self.current_dir, file_name)
@@ -916,14 +968,13 @@ class TextEditor:
         text_widget = self.get_text_widget(self.notebook.nametowidget(self.notebook.select()))
         if text_widget:
             text_widget.bind('<Return>', self.auto_indent)
-            text_widget.bind('<colon>', self.handle_colon)
             text_widget.bind('<Tab>', self.handle_tab)
             text_widget.bind('<Shift-Tab>', self.handle_shift_tab)
             
     def get_text_widget(self, tab):
         text_frame = tab.winfo_children()[0]
         for child in text_frame.winfo_children():
-            if isinstance(child, tk.Text):
+            if isinstance(child, tk.Text) and child != self.line_numbers:
                 return child
         return None
 
@@ -934,6 +985,7 @@ class TextEditor:
         if text_widget is None:
             messagebox.showerror("Error", "Cannot find text widget in the current tab.")
             return
+            
         content = text_widget.get("1.0", tk.END)
 
         if tab_name.startswith("Untitled"):
