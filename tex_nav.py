@@ -148,6 +148,93 @@ class TextEditor:
         self.bind_auto_indent()
         self.create_indent_settings()
         
+        self.suggestions = []
+        self.suggestion_index = 0
+        self.current_word = ""
+        self.completing = False
+        
+    def handle_autocomplete(self, event):
+        current_word = self.get_current_word()
+        if not self.completing or current_word != self.current_word:
+            self.current_word = current_word
+            self.suggestions = self.generate_suggestions(self.current_word)
+            self.suggestion_index = 0
+            self.completing = True
+        else:
+            self.suggestion_index = (self.suggestion_index + 1) % len(self.suggestions)
+        
+        if self.suggestions:
+            self.insert_suggestion()
+        else:
+            self.completing = False
+        
+        return 'break'
+        
+    def get_current_word(self):
+        current_tab = self.notebook.nametowidget(self.notebook.select())
+        text_widget = self.get_text_widget(current_tab)
+        if not text_widget:
+            return ""
+
+        current_pos = text_widget.index(tk.INSERT)
+        line, col = current_pos.split('.')
+        line_start = f"{line}.0"
+        line_content = text_widget.get(line_start, current_pos)
+        
+        word_match = re.search(r'\w+$', line_content)
+        
+        return word_match.group() if word_match else ""
+        
+    def generate_suggestions(self, prefix):
+        current_tab = self.notebook.nametowidget(self.notebook.select())
+        text_widget = self.get_text_widget(current_tab)
+        if not text_widget:
+            return []
+
+        content = text_widget.get("1.0", tk.END)
+        words = re.findall(r'\b\w+\b', content)
+        unique_words = sorted(set(words))
+        return [word for word in unique_words if word.lower().startswith(prefix.lower()) and word.lower() != prefix.lower()]
+        
+    def insert_suggestion(self):
+        current_tab = self.notebook.nametowidget(self.notebook.select())
+        text_widget = self.get_text_widget(current_tab)
+        if not text_widget:
+            return
+
+        suggestion = self.suggestions[self.suggestion_index]
+        current_pos = text_widget.index(tk.INSERT)
+        line, col = current_pos.split('.')
+        
+        # Find the start of the current word
+        line_start = f"{line}.0"
+        line_content = text_widget.get(line_start, current_pos)
+        word_start_match = re.search(r'\w+$', line_content)
+        
+        if word_start_match:
+            word_start = f"{line}.{int(col) - len(word_start_match.group())}"
+        else:
+            word_start = current_pos
+        
+        # Delete the part of the word before the cursor
+        text_widget.delete(word_start, current_pos)
+        
+        # Insert the suggestion
+        text_widget.insert(word_start, suggestion)
+        
+        # Move the cursor to the end of the inserted suggestion
+        text_widget.mark_set(tk.INSERT, f"{line}.{int(col) - len(self.current_word) + len(suggestion)}")
+        
+        # Update current_word to the full suggestion for subsequent cycles
+        self.current_word = suggestion
+        
+    def on_key_release(self, event):
+        if event.keysym not in ('Control_L', 'Control_R'):
+            self.completing = False
+            self.current_word = ""
+            self.suggestions = []
+            self.suggestion_index = 0
+        
     def create_indent_settings(self):
         # Create a frame for indent settings
         indent_frame = ttk.Frame(self.root)
@@ -933,6 +1020,7 @@ class TextEditor:
         text_area.bind('<Return>', lambda e: self.auto_indent(e))
         text_area.bind('<Tab>', self.handle_tab)
         text_area.bind('<Shift-Tab>', self.handle_shift_tab)
+        text_area.bind('<Control-n>', self.handle_autocomplete)
         text_area.bind('<<Change>>', self.on_text_change)
         text_area.bind('<Configure>', self.on_text_change)
 
@@ -1005,6 +1093,7 @@ class TextEditor:
             text_widget.bind('<Return>', lambda e: self.auto_indent(e))
             text_widget.bind('<Tab>', self.handle_tab)
             text_widget.bind('<Shift-Tab>', self.handle_shift_tab)
+            text_widget.bind('<Control-n>', self.handle_autocomplete)
             
     def get_text_widget(self, tab):
         return getattr(tab, 'text_area', None)
