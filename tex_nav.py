@@ -459,7 +459,7 @@ class TextEditor:
         if not self.find_replace_window or not self.find_replace_window.winfo_exists():
             self.find_replace_window = tk.Toplevel(self.root)
             self.find_replace_window.title("Find and Replace")
-            self.find_replace_window.geometry("300x180")
+            self.find_replace_window.geometry("600x200")
 
             # Find entry
             tk.Label(self.find_replace_window, text="Find:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
@@ -481,7 +481,7 @@ class TextEditor:
             # Buttons
             tk.Button(self.find_replace_window, text="Find Next", command=self.advanced_find_next).grid(row=3, column=0, padx=5, pady=5)
             tk.Button(self.find_replace_window, text="Replace", command=self.replace).grid(row=3, column=1, padx=5, pady=5)
-            tk.Button(self.find_replace_window, text="Replace All", command=self.replace_all).grid(row=4, column=0, columnspan=2, padx=5, pady=5)
+            tk.Button(self.find_replace_window, text="Replace All", command=self.replace_all).grid(row=3, column=2, padx=5, pady=5)
 
             # Bind the closing of the window to remove highlights
             self.find_replace_window.protocol("WM_DELETE_WINDOW", self.on_find_replace_close)
