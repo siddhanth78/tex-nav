@@ -4,6 +4,9 @@ import os
 import datetime
 import shutil
 import re
+import ctypes
+ 
+ctypes.windll.shcore.SetProcessDpiAwareness(1)
 
 class TextEditor:
     def __init__(self, root):
@@ -74,7 +77,7 @@ class TextEditor:
         suggestion_frame.grid_columnconfigure(0, weight=1)
         suggestion_frame.grid_rowconfigure(1, weight=1)
 
-        ttk.Label(suggestion_frame, text="Top 10 Suggestions", font=('Courier', 10, 'bold')).grid(row=0, column=0, pady=(0, 5), sticky="nw")
+        ttk.Label(suggestion_frame, text="Top 10 matches", font=('Courier', 10, 'bold')).grid(row=0, column=0, pady=(0, 5), sticky="nw")
         self.suggestion_listbox = tk.Listbox(suggestion_frame, bg=self.bg_color, fg=self.fg_color)
         self.suggestion_listbox.grid(row=1, column=0, sticky="nsew")
         self.suggestion_listbox.bind('<Double-1>', self.use_suggestion)
