@@ -133,6 +133,160 @@ class TextEditor:
         self.current_highlight_tag = 'current_highlight'
         self.case_sensitive_var = tk.BooleanVar()
         self.case_sensitive_var.set(True)
+        
+        self.use_spaces = tk.BooleanVar(value=True)  # Default to spaces
+        self.tab_width = tk.IntVar(value=4)  # Default to 4 spaces/tab width
+        self.bind_auto_indent()
+        self.create_indent_settings()
+        
+    def create_indent_settings(self):
+        # Create a frame for indent settings
+        indent_frame = ttk.Frame(self.root)
+        indent_frame.pack(side=tk.BOTTOM, fill=tk.X)
+
+        # Checkbox for using spaces
+        use_spaces_cb = ttk.Checkbutton(indent_frame, text="Use Spaces", variable=self.use_spaces)
+        use_spaces_cb.pack(side=tk.LEFT, padx=5)
+
+        # Label and entry for tab width
+        ttk.Label(indent_frame, text="Tab Width:").pack(side=tk.LEFT, padx=(10, 0))
+        tab_width_entry = ttk.Entry(indent_frame, textvariable=self.tab_width, width=3)
+        tab_width_entry.pack(side=tk.LEFT, padx=5)
+
+        # Button to apply tab width changes
+        apply_button = ttk.Button(indent_frame, text="Apply", command=self.apply_tab_width)
+        apply_button.pack(side=tk.LEFT, padx=5)
+
+    def apply_tab_width(self):
+        try:
+            new_width = int(self.tab_width.get())
+            if 1 <= new_width <= 8:
+                # Tab width is valid, no need to do anything else
+                pass
+            else:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Tab width must be an integer between 1 and 8.")
+            self.tab_width.set(4)  # Reset to default if invalid
+
+    def get_indent_string(self):
+        if self.use_spaces.get():
+            return ' ' * self.tab_width.get()
+        else:
+            return '\t'
+            
+    def bind_auto_indent(self):
+        for tab in self.notebook.tabs():
+            text_widget = self.get_text_widget(self.notebook.nametowidget(tab))
+            if text_widget:
+                text_widget.bind('<Return>', self.auto_indent)
+                text_widget.bind('<colon>', self.handle_colon)
+                text_widget.bind('<Tab>', self.handle_tab)
+                text_widget.bind('<Shift-Tab>', self.handle_shift_tab)
+                
+    def auto_indent(self, event):
+        text_widget = event.widget
+        cursor_pos = text_widget.index(tk.INSERT)
+        line_num = int(cursor_pos.split('.')[0])
+        line = text_widget.get(f"{line_num}.0", f"{line_num}.end")
+        
+        # Get the indentation of the current line
+        indentation = re.match(r'^(\s*)', line).group(1)
+        
+        # Insert the new line with the same indentation
+        text_widget.insert(tk.INSERT, f"\n{indentation}")
+        
+        return 'break'  # Prevent the default behavior
+        
+    def handle_colon(self, event):
+        text_widget = event.widget
+        cursor_pos = text_widget.index(tk.INSERT)
+        line_num, col_num = map(int, cursor_pos.split('.'))
+        line = text_widget.get(f"{line_num}.0", f"{line_num}.end")
+        
+        # Insert the colon
+        text_widget.insert(tk.INSERT, ':')
+        
+        # Check if the colon is at the end of the line (ignoring whitespace)
+        if line.strip() == '' or col_num >= len(line.rstrip()):
+            current_indent = re.match(r'^(\s*)', line).group(1)
+            next_indent = current_indent + self.get_indent_string()
+            text_widget.insert(tk.INSERT, f"\n{next_indent}")
+            return 'break'  # Prevent the default behavior
+        
+        return 'break'  # Prevent default colon insertion since we've already inserted it
+        
+    def handle_tab(self, event):
+        text_widget = event.widget
+        try:
+            sel_start = text_widget.index("sel.first")
+            sel_end = text_widget.index("sel.last")
+            selected = True
+        except tk.TclError:
+            selected = False
+
+        if selected:
+            return self.indent_selected_lines(text_widget, sel_start, sel_end)
+        else:
+            # Existing behavior for when there's no selection
+            cursor_pos = text_widget.index(tk.INSERT)
+            line_num, col_num = map(int, cursor_pos.split('.'))
+            line = text_widget.get(f"{line_num}.0", f"{line_num}.end")
+            
+            if col_num == 0 or line[:col_num].isspace():
+                text_widget.insert(tk.INSERT, self.get_indent_string())
+                return 'break'
+            
+            return None  # Allow default tab behavior elsewhere
+    
+    def handle_shift_tab(self, event):
+        text_widget = event.widget
+        try:
+            sel_start = text_widget.index("sel.first")
+            sel_end = text_widget.index("sel.last")
+            selected = True
+        except tk.TclError:
+            selected = False
+
+        if selected:
+            return self.unindent_selected_lines(text_widget, sel_start, sel_end)
+        else:
+            # Unindent current line if no selection
+            cursor_pos = text_widget.index(tk.INSERT)
+            line_num = int(cursor_pos.split('.')[0])
+            return self.unindent_selected_lines(text_widget, f"{line_num}.0", f"{line_num}.end")
+            
+    def indent_selected_lines(self, text_widget, sel_start, sel_end):
+        start_line = int(sel_start.split('.')[0])
+        end_line = int(sel_end.split('.')[0])
+        
+        text_widget.tag_remove("sel", "1.0", "end")
+        
+        for line in range(start_line, end_line + 1):
+            text_widget.insert(f"{line}.0", self.get_indent_string())
+        
+        text_widget.tag_add("sel", f"{start_line}.0", f"{end_line + 1}.0")
+        return 'break'
+
+    def unindent_selected_lines(self, text_widget, sel_start, sel_end):
+        start_line = int(sel_start.split('.')[0])
+        end_line = int(sel_end.split('.')[0])
+        
+        text_widget.tag_remove("sel", "1.0", "end")
+        
+        for line in range(start_line, end_line + 1):
+            line_content = text_widget.get(f"{line}.0", f"{line}.end")
+            if line_content.startswith(self.get_indent_string()):
+                text_widget.delete(f"{line}.0", f"{line}.{len(self.get_indent_string())}")
+            elif line_content.startswith('\t'):
+                text_widget.delete(f"{line}.0", f"{line}.1")
+            elif line_content.startswith(' '):
+                # Remove up to 4 spaces (or whatever the tab width is)
+                spaces_to_remove = min(len(line_content) - len(line_content.lstrip()), self.tab_width.get())
+                text_widget.delete(f"{line}.0", f"{line}.{spaces_to_remove}")
+        
+        text_widget.tag_add("sel", f"{start_line}.0", f"{end_line + 1}.0")
+        return 'break'
 
     def update_dir_listing(self):
         self.dir_listbox.delete(0, tk.END)
@@ -745,6 +899,11 @@ class TextEditor:
 
         # Switch to the new tab
         self.notebook.select(tab)
+        
+        text_area.bind('<Return>', self.auto_indent)
+        text_area.bind('<colon>', self.handle_colon)
+        text_area.bind('<Tab>', self.handle_tab)
+        text_area.bind('<Shift-Tab>', self.handle_shift_tab)
 
     def create_new_file(self, file_name):
         file_path = os.path.join(self.current_dir, file_name)
@@ -753,6 +912,13 @@ class TextEditor:
         else:
             # Don't create the file immediately, just open a new tab
             self.open_file(file_name)
+            
+        text_widget = self.get_text_widget(self.notebook.nametowidget(self.notebook.select()))
+        if text_widget:
+            text_widget.bind('<Return>', self.auto_indent)
+            text_widget.bind('<colon>', self.handle_colon)
+            text_widget.bind('<Tab>', self.handle_tab)
+            text_widget.bind('<Shift-Tab>', self.handle_shift_tab)
             
     def get_text_widget(self, tab):
         text_frame = tab.winfo_children()[0]
