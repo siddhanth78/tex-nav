@@ -5,8 +5,6 @@ import datetime
 import shutil
 import re
 
-
-
 class TextEditor:
     def __init__(self, root):
         self.root = root
@@ -126,8 +124,15 @@ class TextEditor:
         
         # Store find next window
         self.find_window = None
+        
+        # Initialize find and replace variables
+        self.find_replace_window = None
+        self.current_search_position = '1.0'
+        self.word_to_find = ""
         self.highlight_tag = 'highlight'
         self.current_highlight_tag = 'current_highlight'
+        self.case_sensitive_var = tk.BooleanVar()
+        self.case_sensitive_var.set(True)
 
     def update_dir_listing(self):
         self.dir_listbox.delete(0, tk.END)
@@ -210,11 +215,11 @@ class TextEditor:
         label = tk.Label(self.find_window, text=f"Found {count} occurrences of '{self.word_to_find}'.")
         label.pack(pady=10)
 
-        find_next_button = tk.Button(self.find_window, text="Find Next", command=self.find_next)
+        find_next_button = tk.Button(self.find_window, text="Find Next", command=self.simple_find_next)
         find_next_button.pack(pady=10)
 
-        # Bind the Enter key to the find_next method
-        self.find_window.bind('<Return>', lambda event: self.find_next())
+        # Bind the Enter key to the simple_find_next method
+        self.find_window.bind('<Return>', lambda event: self.simple_find_next())
 
         # Keep the Find Next window on top
         self.find_window.attributes('-topmost', True)
@@ -239,7 +244,7 @@ class TextEditor:
         text_widget.tag_remove(self.highlight_tag, '1.0', tk.END)
         text_widget.tag_remove(self.current_highlight_tag, '1.0', tk.END)
 
-    def find_next(self):
+    def simple_find_next(self):
         current_tab = self.notebook.select()
         if not current_tab:
             messagebox.showerror("Error", "No file is currently open.")
@@ -286,74 +291,47 @@ class TextEditor:
             messagebox.showerror("Error", "Cannot find text widget in the current tab.")
             return
 
-        # Create a new top-level window
-        fr_window = tk.Toplevel(self.root)
-        fr_window.title("Find and Replace")
-        fr_window.geometry("300x120")
+        # Create a new top-level window if it doesn't exist
+        if not self.find_replace_window or not self.find_replace_window.winfo_exists():
+            self.find_replace_window = tk.Toplevel(self.root)
+            self.find_replace_window.title("Find and Replace")
+            self.find_replace_window.geometry("300x180")
 
-        # Find entry
-        tk.Label(fr_window, text="Find:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
-        find_entry = tk.Entry(fr_window, width=30)
-        find_entry.grid(row=0, column=1, padx=5, pady=5)
+            # Find entry
+            tk.Label(self.find_replace_window, text="Find:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
+            self.find_entry = tk.Entry(self.find_replace_window, width=30)
+            self.find_entry.grid(row=0, column=1, padx=5, pady=5)
+            self.find_entry.bind('<KeyRelease>', self.highlight_all_occurrences)
 
-        # Replace entry
-        tk.Label(fr_window, text="Replace with:").grid(row=1, column=0, padx=5, pady=5, sticky="e")
-        replace_entry = tk.Entry(fr_window, width=30)
-        replace_entry.grid(row=1, column=1, padx=5, pady=5)
+            # Replace entry
+            tk.Label(self.find_replace_window, text="Replace with:").grid(row=1, column=0, padx=5, pady=5, sticky="e")
+            self.replace_entry = tk.Entry(self.find_replace_window, width=30)
+            self.replace_entry.grid(row=1, column=1, padx=5, pady=5)
 
-        def on_find_entry_change(*args):
-            find_text = find_entry.get()
-            if find_text:
-                self.highlight_all_occurrences(find_text, text_widget)
-                self.move_to_next_occurrence(text_widget)
-            else:
-                self.clear_all_highlights(text_widget)
+            # Case sensitive checkbox
+            self.case_sensitive_checkbox = tk.Checkbutton(self.find_replace_window, text="Case sensitive", 
+                                                          variable=self.case_sensitive_var, 
+                                                          command=self.highlight_all_occurrences)
+            self.case_sensitive_checkbox.grid(row=2, column=0, columnspan=2, pady=5)
 
-        find_entry.bind('<KeyRelease>', on_find_entry_change)
+            # Buttons
+            tk.Button(self.find_replace_window, text="Find Next", command=self.advanced_find_next).grid(row=3, column=0, padx=5, pady=5)
+            tk.Button(self.find_replace_window, text="Replace", command=self.replace).grid(row=3, column=1, padx=5, pady=5)
+            tk.Button(self.find_replace_window, text="Replace All", command=self.replace_all).grid(row=4, column=0, columnspan=2, padx=5, pady=5)
 
-        def replace():
-            find_text = find_entry.get()
-            replace_text = replace_entry.get()
-            if not find_text:
-                messagebox.showwarning("Warning", "Find field is empty.")
-                return
-            
-            # Get the current orange highlight position
-            ranges = text_widget.tag_ranges(self.current_highlight_tag)
-            if ranges:
-                start, end = ranges[0], ranges[1]
-                text_widget.delete(start, end)
-                text_widget.insert(start, replace_text)
-                
-                # Remove the orange highlight
-                text_widget.tag_remove(self.current_highlight_tag, start, text_widget.index(f"{start}+{len(replace_text)}c"))
-                
-                # Move to the next occurrence
-                self.move_to_next_occurrence(text_widget)
-            else:
-                messagebox.showinfo("Find and Replace", "No current selection to replace.")
+            # Bind the closing of the window to remove highlights
+            self.find_replace_window.protocol("WM_DELETE_WINDOW", self.on_find_replace_close)
 
-        def replace_all():
-            find_text = find_entry.get()
-            replace_text = replace_entry.get()
-            if not find_text:
-                messagebox.showwarning("Warning", "Find field is empty.")
-                return
-            
-            content = text_widget.get("1.0", tk.END)
-            new_content, count = re.subn(re.escape(find_text), replace_text, content)
-            text_widget.delete("1.0", tk.END)
-            text_widget.insert("1.0", new_content)
-            messagebox.showinfo("Find and Replace", f"Replaced {count} occurrence(s).")
-            
-            # Clear all highlights after replace all
+    def highlight_all_occurrences(self, event=None):
+        text_widget = self.get_current_text_widget()
+        if not text_widget:
+            return
+
+        find_text = self.find_entry.get()
+        if not find_text:
             self.clear_all_highlights(text_widget)
+            return
 
-        # Buttons
-        tk.Button(fr_window, text="Replace", command=replace).grid(row=2, column=0, padx=5, pady=5, sticky="ew")
-        tk.Button(fr_window, text="Replace All", command=replace_all).grid(row=2, column=1, padx=5, pady=5, sticky="ew")
-
-    def highlight_all_occurrences(self, word, text_widget):
         # Remove any existing highlights
         self.clear_all_highlights(text_widget)
 
@@ -361,40 +339,128 @@ class TextEditor:
         text_widget.tag_configure(self.highlight_tag, background='yellow', foreground='black')
         text_widget.tag_configure(self.current_highlight_tag, background='orange', foreground='black')
 
+        # Find and highlight all occurrences
         start_pos = '1.0'
         while True:
-            start_pos = text_widget.search(word, start_pos, stopindex=tk.END, exact=True)
+            start_pos = text_widget.search(find_text, start_pos, stopindex=tk.END, 
+                                           nocase=not self.case_sensitive_var.get())
             if not start_pos:
                 break
-            end_pos = f"{start_pos}+{len(word)}c"
+            end_pos = f"{start_pos}+{len(find_text)}c"
             text_widget.tag_add(self.highlight_tag, start_pos, end_pos)
             start_pos = end_pos
 
-        self.word_to_find = word
         self.current_search_position = '1.0'
+        self.word_to_find = find_text
+        self.advanced_find_next()
 
-    def move_to_next_occurrence(self, text_widget):
-        # Remove current highlight
+    def advanced_find_next(self):
+        text_widget = self.get_current_text_widget()
+        if not text_widget:
+            return
+
+        # Remove previous current highlight
         text_widget.tag_remove(self.current_highlight_tag, '1.0', tk.END)
 
-        start_pos = text_widget.search(self.word_to_find, self.current_search_position, stopindex=tk.END, exact=True)
+        start_pos = text_widget.search(self.word_to_find, self.current_search_position, 
+                                       stopindex=tk.END, nocase=not self.case_sensitive_var.get())
+        
         if not start_pos:
-            # If not found from current position, start from the beginning
-            start_pos = text_widget.search(self.word_to_find, '1.0', stopindex=tk.END, exact=True)
+            start_pos = text_widget.search(self.word_to_find, '1.0', 
+                                           stopindex=tk.END, nocase=not self.case_sensitive_var.get())
             if not start_pos:
-                self.current_search_position = '1.0'  # Reset search position to beginning
-                return  # No occurrences found, don't show a message box
+                messagebox.showinfo("Find", f"Reached the end of the document. No more occurrences of '{self.word_to_find}' found.")
+                self.current_search_position = '1.0'  # Reset to the beginning for the next search
+                if self.find_replace_window:
+                    self.find_replace_window.focus_force()
+                    self.find_entry.delete(0, tk.END)
+                return
 
         end_pos = f"{start_pos}+{len(self.word_to_find)}c"
+        
+        # Highlight the current occurrence
         text_widget.tag_add(self.current_highlight_tag, start_pos, end_pos)
         text_widget.see(start_pos)
-        text_widget.mark_set(tk.INSERT, end_pos)
 
+        # Update the current search position for the next search
         self.current_search_position = end_pos
+
+    def replace(self):
+        text_widget = self.get_current_text_widget()
+        if not text_widget:
+            return
+
+        replace_text = self.replace_entry.get()
+
+        # Check if there's a current highlight
+        ranges = text_widget.tag_ranges(self.current_highlight_tag)
+        if ranges:
+            start, end = ranges[0], ranges[1]
+            text_widget.delete(start, end)
+            text_widget.insert(start, replace_text)
+            
+            # Remove only the current (orange) highlight
+            text_widget.tag_remove(self.current_highlight_tag, start, text_widget.index(f"{start}+{len(replace_text)}c"))
+            
+            # Update the yellow highlight to cover the new replaced text
+            text_widget.tag_add(self.highlight_tag, start, text_widget.index(f"{start}+{len(replace_text)}c"))
+            
+            self.current_search_position = f"{start}+{len(replace_text)}c"
+        
+        # Find and highlight the next occurrence
+        self.advanced_find_next()
+
+        # If no more occurrences are found, remove all highlights
+        if not text_widget.tag_ranges(self.current_highlight_tag):
+            self.clear_all_highlights(text_widget)
+            messagebox.showinfo("Find and Replace", "No more occurrences found. All highlights cleared.")
+            if self.find_replace_window:
+                self.find_replace_window.focus_force()
+                self.find_entry.delete(0, tk.END)
+
+    def replace_all(self):
+        text_widget = self.get_current_text_widget()
+        if not text_widget:
+            return
+
+        find_text = self.find_entry.get()
+        replace_text = self.replace_entry.get()
+
+        content = text_widget.get('1.0', tk.END)
+        if self.case_sensitive_var.get():
+            new_content, count = re.subn(re.escape(find_text), replace_text, content)
+        else:
+            new_content, count = re.subn(re.escape(find_text), replace_text, content, flags=re.IGNORECASE)
+        
+        if count > 0:
+            text_widget.delete('1.0', tk.END)
+            text_widget.insert('1.0', new_content)
+            self.clear_all_highlights(text_widget)
+            messagebox.showinfo("Replace All", f"Replaced {count} occurrence(s).")
+        else:
+            messagebox.showinfo("Replace All", f"No occurrences of '{find_text}' found.")
+        
+        if self.find_replace_window:
+            self.find_replace_window.focus_force()
+            self.find_entry.delete(0, tk.END)
+
+    def on_find_replace_close(self):
+        text_widget = self.get_current_text_widget()
+        if text_widget:
+            self.clear_all_highlights(text_widget)
+        self.find_replace_window.destroy()
+        self.find_replace_window = None
 
     def clear_all_highlights(self, text_widget):
         text_widget.tag_remove(self.highlight_tag, '1.0', tk.END)
         text_widget.tag_remove(self.current_highlight_tag, '1.0', tk.END)
+
+    def get_current_text_widget(self):
+        current_tab = self.notebook.select()
+        if not current_tab:
+            messagebox.showerror("Error", "No file is currently open.")
+            return None
+        return self.get_text_widget(self.notebook.nametowidget(current_tab))
 
     def highlight_occurrences(self):
         current_tab = self.notebook.select()
@@ -428,7 +494,7 @@ class TextEditor:
         if count > 0:
             self.current_search_position = '1.0'  # Reset search position
             self.show_find_dialog(count)
-            self.find_next()  # Highlight the first occurrence
+            self.simple_find_next()  # Highlight the first occurrence
         else:
             messagebox.showinfo("Find", f"No occurrences of '{self.word_to_find}' found.")
 
