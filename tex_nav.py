@@ -317,10 +317,11 @@ class TextEditor:
         return 'break'  # Prevent the default behavior
         
     def handle_tab(self, event):
-        if not self.text_area:
+        current_tab = self.notebook.nametowidget(self.notebook.select())
+        text_widget = self.get_text_widget(current_tab)
+        if not text_widget:
             return None
         
-        text_widget = self.text_area
         try:
             sel_start = text_widget.index("sel.first")
             sel_end = text_widget.index("sel.last")
@@ -346,10 +347,11 @@ class TextEditor:
             return None  # Allow default tab behavior elsewhere
     
     def handle_shift_tab(self, event):
-        if not self.text_area:
+        current_tab = self.notebook.nametowidget(self.notebook.select())
+        text_widget = self.get_text_widget(current_tab)
+        if not text_widget:
             return None
         
-        text_widget = self.text_area
         try:
             sel_start = text_widget.index("sel.first")
             sel_end = text_widget.index("sel.last")
