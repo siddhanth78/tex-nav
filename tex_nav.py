@@ -809,9 +809,9 @@ class TextEditor:
             elif os.path.isdir(source_path):
                 shutil.copytree(source_path, dest_path)
                 messagebox.showinfo("Success", f"Directory '{source}' and its contents have been copied to '{destination}'.")
+
+            self.update_dir_listing()
             
-            if os.path.commonpath([self.current_dir, dest_path]) == self.current_dir:
-                self.update_dir_listing()
         except Exception as e:
             messagebox.showerror("Error", f"Failed to copy '{source}' to '{destination}': {str(e)}")
 
@@ -858,8 +858,8 @@ class TextEditor:
                         text_widget.file_path = dest_path
                     break
             
-            if os.path.commonpath([self.current_dir, source_path]) == self.current_dir or os.path.commonpath([self.current_dir, dest_path]) == self.current_dir:
-                self.update_dir_listing()
+            self.update_dir_listing()
+            
         except Exception as e:
             messagebox.showerror("Error", f"Failed to move '{source}' to '{destination}': {str(e)}")
 
