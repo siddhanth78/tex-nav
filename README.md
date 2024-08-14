@@ -1,6 +1,7 @@
 # TEX-NAV Text Editor
 
-TEX-NAV is a text editor and file navigator built with Python and Tkinter.
+- TEX-NAV is a text editor and file navigator built with Python and Tkinter.
+- Made for Windows.
 
 ## Requirements
 
