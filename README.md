@@ -18,6 +18,10 @@ cd tex-nav
 python setup.py
 ```
 
+TEX-NAV will be installed in your home directory.
+
+To remove TEX-NAV from your system, navigate to your home directory, and delete the TEX-NAV folder and the TEX-NAV desktop shortcut manually.
+
 ## Commands
 
 TEX-NAV supports various commands that can be entered in the query bar:
