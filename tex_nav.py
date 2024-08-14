@@ -1004,9 +1004,15 @@ class TextEditor:
 
         # If the file exists, read its contents
         if os.path.exists(file_path):
-            with open(file_path, 'r') as file:
-                content = file.read()
-                text_area.insert(tk.END, content)
+            try:
+                with open(file_path, 'r') as file:
+                    content = file.read()
+                    text_area.insert(tk.END, content)
+            except:
+                messagebox.showerror("Error", f"Error reading file.")
+                return
+            else:
+                pass
         
         # Add the tab to the notebook
         self.notebook.add(tab, text=file_name)
