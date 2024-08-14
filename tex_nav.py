@@ -14,6 +14,18 @@ class TextEditor:
         self.root = root
         self.root.title("TEX-NAV")
         self.root.geometry("1200x600")
+        
+        # Set the window icon
+        if getattr(sys, 'frozen', False):
+            # If the application is run as a bundle, the PyInstaller bootloader
+            # extends the sys module by a flag frozen=True and sets the app 
+            # path into variable _MEIPASS'.
+            application_path = sys._MEIPASS
+        else:
+            application_path = os.path.dirname(os.path.abspath(__file__))
+
+        icon_path = os.path.join(application_path, 'tex_nav_icon.ico')
+        self.root.iconbitmap(icon_path)
 
         # Configure dark mode colors
         self.bg_color = "#2E2E2E"  # Dark grey
