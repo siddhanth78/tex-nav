@@ -10,9 +10,11 @@
 
 ## Usage
 
-Run the script using Python:
+Run the script to set up TEX-NAV:
 
 ```
+git clone https://github.com/siddhanth78/tex-nav
+cd tex-nav
 python setup.py
 ```
 
