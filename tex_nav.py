@@ -5,6 +5,7 @@ import datetime
 import shutil
 import re
 import ctypes
+import subprocess
  
 ctypes.windll.shcore.SetProcessDpiAwareness(1)
 
@@ -152,6 +153,9 @@ class TextEditor:
         self.suggestion_index = 0
         self.current_word = ""
         self.completing = False
+        
+    def open_command_prompt(self):
+        subprocess.Popen(f'start cmd /K "cd /d {self.current_dir}"', shell=True)
         
     def handle_autocomplete(self, event):
         current_word = self.get_current_word()
@@ -427,6 +431,8 @@ class TextEditor:
                 self.find_and_replace()
             elif command[0] == 'fs' and len(command) > 1:
                 self.change_font_size(command[1])
+            elif command[0] == 'cmd':
+                self.open_command_prompt()
             else:
                 messagebox.showerror("Error", f"Unknown command: {query}")
         else:
