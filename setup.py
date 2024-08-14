@@ -15,6 +15,7 @@ def create_executable():
         "--windowed",
         "--name=TEX-NAV",
         "--icon=tex_nav_icon.ico",
+        "--add-data=tex_nav_icon.ico:.",
         "tex_nav.py"
     ])
 
