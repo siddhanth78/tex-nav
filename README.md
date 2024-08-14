@@ -12,7 +12,7 @@ TEX-NAV is a text editor and file navigator built with Python and Tkinter.
 Run the script using Python:
 
 ```
-python tex_nav.py
+python setup.py
 ```
 
 ## Commands
