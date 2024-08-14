@@ -10,7 +10,7 @@
 
 ## Usage
 
-Run the script to set up TEX-NAV:
+Run the script in your preferred directory to set up TEX-NAV:
 
 ```
 git clone https://github.com/siddhanth78/tex-nav
