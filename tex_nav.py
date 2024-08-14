@@ -121,6 +121,8 @@ class TextEditor:
         # Set initial directory
         self.current_dir = os.path.expanduser('~')
         self.update_dir_listing()
+        
+        self.unsaved_changes = {}  # Dictionary to track unsaved changes for each tab
 
         # Create the first tab
         self.open_file("Untitled-1")
@@ -1008,6 +1010,9 @@ class TextEditor:
         
         # Add the tab to the notebook
         self.notebook.add(tab, text=file_name)
+    
+        # Initialize saved state
+        self.unsaved_changes[tab] = False
 
         # Store the full file path and widgets in the tab
         tab.file_path = file_path
@@ -1049,6 +1054,16 @@ class TextEditor:
         text_widget = self.get_text_widget(current_tab)
         if text_widget:
             self.update_line_numbers()
+            if not self.unsaved_changes.get(current_tab, False):
+                self.unsaved_changes[current_tab] = True
+                self.update_tab_title(current_tab)
+
+    def update_tab_title(self, tab):
+        current_title = self.notebook.tab(tab, "text")
+        if self.unsaved_changes.get(tab, False) and not current_title.endswith('*'):
+            self.notebook.tab(tab, text=current_title + '*')
+        elif not self.unsaved_changes.get(tab, False) and current_title.endswith('*'):
+            self.notebook.tab(tab, text=current_title[:-1])
 
     def update_line_numbers(self):
         if not self.line_numbers_enabled:
@@ -1100,6 +1115,9 @@ class TextEditor:
             text_widget.bind('<Tab>', self.handle_tab)
             text_widget.bind('<Shift-Tab>', self.handle_shift_tab)
             text_widget.bind('<Control-n>', self.handle_autocomplete)
+        
+        self.unsaved_changes[current_tab] = False
+        self.update_tab_title(current_tab)
             
     def get_text_widget(self, tab):
         return getattr(tab, 'text_area', None)
@@ -1126,25 +1144,36 @@ class TextEditor:
                 else:
                     self.notebook.tab(current_tab, text=file_name)
                     current_tab.file_path = file_path
+                self.unsaved_changes[current_tab] = False
+                self.update_tab_title(current_tab)
             else:
                 return
         else:
-            file_path = getattr(current_tab, 'file_path', os.path.join(self.current_dir, tab_name))
+            file_path = getattr(current_tab, 'file_path', os.path.join(self.current_dir, tab_name.rstrip('*')))
             with open(file_path, 'w') as file:
                 file.write(content)
             self.update_dir_listing()
+            self.unsaved_changes[current_tab] = False
+            self.update_tab_title(current_tab)
 
     def close_current_tab(self):
+        current_tab = self.notebook.select()
+        if self.unsaved_changes.get(self.notebook.nametowidget(current_tab), False):
+            if not messagebox.askyesno("Unsaved Changes", "There are unsaved changes. Do you want to close without saving?"):
+                return
+        
         if self.notebook.index('end') > 1:
-            current_tab = self.notebook.select()
             self.notebook.forget(current_tab)
+            del self.unsaved_changes[self.notebook.nametowidget(current_tab)]
         else:
-            current_tab = self.notebook.nametowidget(self.notebook.select())
+            current_tab = self.notebook.nametowidget(current_tab)
             text_widget = self.get_text_widget(current_tab)
             if text_widget is not None:
                 text_widget.delete('1.0', tk.END)
             self.notebook.tab(current_tab, text="Untitled-1")
             current_tab.file_path = None
+            self.unsaved_changes[current_tab] = False
+            self.update_tab_title(current_tab)
 
     def open_selected_file(self, event):
         selection = self.dir_listbox.curselection()
