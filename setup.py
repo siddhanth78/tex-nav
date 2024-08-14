@@ -14,7 +14,7 @@ def create_executable():
         "--onefile",
         "--windowed",
         "--name=TEX-NAV",
-        "--icon=tex_nav_icon.ico",  # Make sure you have an icon file
+        "--icon=tex_nav_icon.ico",
         "tex_nav.py"
     ])
 
