@@ -1098,14 +1098,6 @@ class TextEditor:
         width = len(str(total_lines))
         line_numbers.config(width=width + 1)  # +1 for some padding
 
-    def toggle_line_numbers(self):
-        self.line_numbers_enabled = not self.line_numbers_enabled
-        if self.line_numbers_enabled:
-            self.line_numbers.grid()
-            self.update_line_numbers()
-        else:
-            self.line_numbers.grid_remove()
-
     def create_new_file(self, file_name):
         file_path = os.path.join(self.current_dir, file_name)
         if os.path.exists(file_path):
