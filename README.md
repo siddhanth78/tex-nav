@@ -17,7 +17,7 @@ pip install tkmacosx
 python tex_nav_macos.py
 ```
 
-Run the script in your preferred directory to set up TEX-NAV:
+For Windows, run the script in your preferred directory to set up TEX-NAV:
 
 ```
 git clone https://github.com/siddhanth78/tex-nav
