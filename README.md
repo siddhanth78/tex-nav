@@ -53,3 +53,4 @@ TEX-NAV supports various commands that can be entered in the query bar:
 - `Ctrl+N` - Text autocompletion
 - `Tab` - Indent selected text, insert tab or autofill query
 - `Shift+Tab` - Unindent selected text
+- `Ctrl+Space` - Shift focus between text area and query entry
