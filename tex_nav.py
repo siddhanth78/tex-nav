@@ -6,6 +6,7 @@ import shutil
 import re
 import ctypes
 import subprocess
+import sys
  
 ctypes.windll.shcore.SetProcessDpiAwareness(1)
 
@@ -135,6 +136,9 @@ class TextEditor:
         self.update_dir_listing()
         
         self.unsaved_changes = {}  # Dictionary to track unsaved changes for each tab
+        
+        self.last_focused_text = None
+        self.root.bind('<Control-space>', self.switch_focus)
 
         # Create the first tab
         self.open_file("Untitled-1")
@@ -167,6 +171,26 @@ class TextEditor:
         self.suggestion_index = 0
         self.current_word = ""
         self.completing = False
+        
+    def switch_focus(self, event=None):
+        current_focus = self.root.focus_get()
+        
+        if current_focus == self.query_entry:
+            # If focus is on the query entry, switch to the last focused text area
+            if self.last_focused_text and self.last_focused_text.winfo_exists():
+                self.last_focused_text.focus_set()
+            else:
+                # If last_focused_text is not available, focus on the current tab's text area
+                current_tab = self.notebook.nametowidget(self.notebook.select())
+                text_widget = self.get_text_widget(current_tab)
+                if text_widget:
+                    text_widget.focus_set()
+        else:
+            # If focus is anywhere else, switch to the query entry
+            self.query_entry.focus_set()
+            
+    def update_last_focused_text(self, event):
+        self.last_focused_text = event.widget
         
     def open_command_prompt(self):
         subprocess.Popen(f'start cmd /K "cd /d {self.current_dir}"', shell=True)
@@ -1052,6 +1076,7 @@ class TextEditor:
         text_area.bind('<Tab>', self.handle_tab)
         text_area.bind('<Shift-Tab>', self.handle_shift_tab)
         text_area.bind('<Control-n>', self.handle_autocomplete)
+        text_area.bind('<FocusIn>', self.update_last_focused_text)
         text_area.bind('<<Change>>', self.on_text_change)
         text_area.bind('<Configure>', self.on_text_change)
 
@@ -1127,6 +1152,7 @@ class TextEditor:
             text_widget.bind('<Tab>', self.handle_tab)
             text_widget.bind('<Shift-Tab>', self.handle_shift_tab)
             text_widget.bind('<Control-n>', self.handle_autocomplete)
+            text_widget.bind('<FocusIn>', self.update_last_focused_text)
         
         self.unsaved_changes[current_tab] = False
         self.update_tab_title(current_tab)
