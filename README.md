@@ -10,6 +10,13 @@
 
 ## Usage
 
+For TEX-NAV MacOS, run this:
+
+```
+pip install tkmacosx
+python tex_nav_macos.py
+```
+
 Run the script in your preferred directory to set up TEX-NAV:
 
 ```
