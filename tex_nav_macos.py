@@ -154,7 +154,7 @@ class TextEditor:
         self.completing = False
         
     def open_command_prompt(self):
-        subprocess.Popen(f'start cmd /K "cd /d {self.current_dir}"', shell=True)
+        subprocess.Popen(['osascript', '-e', f'tell app "Terminal" to do script "cd {self.current_dir}"'])
         
     def handle_autocomplete(self, event):
         current_word = self.get_current_word()
